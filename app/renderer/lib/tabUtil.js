@@ -36,3 +36,8 @@ module.exports.hasBreakpoint = (breakpoint, arr) => {
   arr = Array.isArray(arr) ? arr : [arr]
   return arr.includes(breakpoint)
 }
+
+module.exports.hasTabAsRelatedTarget = (event) => {
+  const tabComponents = /tab(?=_|area|title|id)|closetab|icon/i
+  return tabComponents.test(event.relatedTarget.classList)
+}

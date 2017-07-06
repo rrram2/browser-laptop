@@ -205,18 +205,6 @@ Dispatches a message to the store when the frame is active and the window is foc
 
 
 
-### setPreviewFrame(frameKey) 
-
-Dispatches a message to the store to set a preview frame.
-This should only be called internally by `WINDOW_SET_TAB_HOVER_STATE`
-when we need to delay updating the preview frame value
-
-**Parameters**
-
-**frameKey**: `Object`, the frame key for the webview in question.
-
-
-
 ### setTabPageIndex(index) 
 
 Dispatches a message to the store to set the tab page index.
@@ -239,7 +227,7 @@ Dispatches a message to the store to set the tab breakpoint.
 
 
 
-### setTabHoverState(frameKey, hoverState) 
+### setTabHoverState(frameKey, hoverState, previewMode) 
 
 Dispatches a message to the store to set the current tab hover state.
 
@@ -248,6 +236,9 @@ Dispatches a message to the store to set the current tab hover state.
 **frameKey**: `Object`, the frame key for the webview in question.
 
 **hoverState**: `boolean`, whether or not mouse is over tab
+
+**previewMode**: `boolean`, whether or not the next tab should be previewed
+based on mouse idle time
 
 
 

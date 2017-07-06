@@ -355,9 +355,6 @@ const doAction = (action) => {
     case windowConstants.WINDOW_CLEAR_CLOSED_FRAMES:
       windowState = windowState.set('closedFrames', new Immutable.List())
       break
-    case windowConstants.WINDOW_SET_PREVIEW_FRAME:
-      windowState = frameStateUtil.setPreviewFrameKey(windowState, action.frameKey, true)
-      break
     case windowConstants.WINDOW_SET_PREVIEW_TAB_PAGE_INDEX:
       windowState = frameStateUtil.setPreviewTabPageIndex(windowState, action.previewTabPageIndex, true)
       break
@@ -382,7 +379,8 @@ const doAction = (action) => {
       }
     case windowConstants.WINDOW_SET_TAB_HOVER_STATE:
       {
-        windowState = frameStateUtil.setTabHoverState(windowState, action.frameKey, action.hoverState)
+        windowState = frameStateUtil
+          .setTabHoverState(windowState, action.frameKey, action.hoverState, action.previewMode)
         break
       }
     case windowConstants.WINDOW_SET_TAB_PAGE_HOVER_STATE:

@@ -10,7 +10,7 @@ const {SettingsList, SettingItem, SettingCheckbox} = require('../common/settings
 
 const {SettingDropdown} = require('../common/dropdown')
 
-const {tabCloseAction} = require('../../../common/constants/settingsEnums')
+const {tabCloseAction, tabPreviewTiming} = require('../../../common/constants/settingsEnums')
 const {changeSetting} = require('../../lib/settingsUtil')
 const getSetting = require('../../../../js/settings').getSetting
 const settings = require('../../../../js/constants/settings')
@@ -107,6 +107,19 @@ class TabsTab extends ImmutableComponent {
             settings={this.props.settings}
             onChangeSetting={this.props.onChangeSetting}
           />
+          {
+            getSetting(settings.SHOW_TAB_PREVIEWS, this.props.settings)
+              ? <SettingItem dataL10nId='tabPreviewTiming'>
+                <SettingDropdown
+                  value={getSetting(settings.TAB_PREVIEW_TIMING, this.props.settings)}
+                  onChange={changeSetting.bind(null, this.props.onChangeSetting, settings.TAB_PREVIEW_TIMING)}>
+                  <option data-l10n-id='long' value={tabPreviewTiming.LONG} />
+                  <option data-l10n-id='normal' value={tabPreviewTiming.NORMAL} />
+                  <option data-l10n-id='short' value={tabPreviewTiming.SHORT} />
+                </SettingDropdown>
+              </SettingItem>
+              : null
+          }
           <SettingItem dataL10nId='dashboardSettingsTitle'>
             <SettingCheckbox
               dataL10nId='dashboardShowImages'

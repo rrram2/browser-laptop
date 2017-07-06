@@ -3,6 +3,7 @@
 const Brave = require('../lib/brave')
 const messages = require('../../js/constants/messages')
 const settings = require('../../js/constants/settings')
+const {tabPreviewTiming} = require('../../app/common/constants/settingsEnums')
 const {urlInput, backButton, forwardButton, activeTab, activeTabTitle, activeTabFavicon, newFrameButton, notificationBar, contextMenu, pinnedTabsTabs, tabsTabs} = require('../lib/selectors')
 
 const newTabUrl = 'chrome-extension://mnojpmjdmbbfmejpflffifhffcmidifd/about-newtab.html'
@@ -373,6 +374,7 @@ describe('tab tests', function () {
       const page1 = Brave.server.url('page1.html')
       const page2 = Brave.server.url('page2.html')
       yield setup(this.app.client)
+      yield this.app.client.changeSetting(settings.TAB_PREVIEW_TIMING, tabPreviewTiming.LONG)
       yield this.app.client
         .newTab({ url: page1 })
         .waitForUrl(page1)
@@ -383,11 +385,11 @@ describe('tab tests', function () {
         .windowByUrl(Brave.browserWindowUrl)
         .waitForExist('[data-test-id="tab"][data-frame-key="3"]')
     })
-    it('shows a tab preview', function * () {
+    it('shows a tab preview when TAB_PREVIEW_TIMING is set as LONG', function * () {
       yield this.app.client
         .moveToObject('[data-test-id="tab"][data-frame-key="2"]')
         .moveToObject('[data-test-id="tab"][data-frame-key="2"]', 3, 3)
-        .waitForExist('.frameWrapper.isPreview webview[data-frame-key="2"]')
+        .waitForExist('.frameWrapper.isPreview webview[data-frame-key="2"]', 2500)
         .moveToObject(urlInput)
     })
     it('does not show tab previews when setting is off', function * () {
@@ -414,6 +416,8 @@ describe('tab tests', function () {
       const page5 = Brave.server.url('page1.html')
       const page6 = Brave.server.url('page2.html')
       yield setup(this.app.client)
+      // Erase preview timing to avoid timeout.
+      yield this.app.client.changeSetting(settings.TAB_PREVIEW_TIMING, 0)
       yield this.app.client
         .newTab({ url: page1 })
         .waitForUrl(page1)
