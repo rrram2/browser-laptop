@@ -7,26 +7,21 @@ const appConstants = require('../constants/appConstants')
 const windowConstants = require('../constants/windowConstants')
 const ExtensionConstants = require('../../app/common/constants/extensionConstants')
 const AppDispatcher = require('../dispatcher/appDispatcher')
-const appConfig = require('../constants/appConfig')
 const settings = require('../constants/settings')
 const siteUtil = require('../state/siteUtil')
 const syncUtil = require('../state/syncUtil')
 const siteSettings = require('../state/siteSettings')
-const appUrlUtil = require('../lib/appUrlUtil')
 const electron = require('electron')
 const app = electron.app
 const messages = require('../constants/messages')
 const UpdateStatus = require('../constants/updateStatus')
 const BrowserWindow = electron.BrowserWindow
 const syncActions = require('../actions/syncActions')
-const firstDefinedValue = require('../lib/functional').firstDefinedValue
 const dates = require('../../app/dates')
-const getSetting = require('../settings').getSetting
 const EventEmitter = require('events').EventEmitter
 const Immutable = require('immutable')
 const diff = require('immutablediff')
 const debounce = require('../lib/debounce')
-const path = require('path')
 const autofill = require('../../app/autofill')
 const nativeImage = require('../../app/nativeImage')
 const filtering = require('../../app/filtering')
@@ -44,9 +39,6 @@ const aboutNewTabState = require('../../app/common/state/aboutNewTabState')
 const aboutHistoryState = require('../../app/common/state/aboutHistoryState')
 const tabState = require('../../app/common/state/tabState')
 
-const isDarwin = process.platform === 'darwin'
-const isWindows = process.platform === 'win32'
-
 // Only used internally
 const CHANGE_EVENT = 'app-state-change'
 
@@ -55,206 +47,6 @@ const defaultProtocols = ['https', 'http']
 let appState = null
 let lastEmittedState
 let initialized = false
-
-// TODO cleanup all this createWindow crap
-function isModal (browserOpts) {
-  // this needs some better checks
-  return browserOpts.scrollbars === false
-}
-
-const navbarHeight = () => {
-  // TODO there has to be a better way to get this or at least add a test
-  return 75
-}
-
-/**
- * Determine window dimensions (width / height)
- */
-const setWindowDimensions = (browserOpts, defaults, windowState) => {
-  if (windowState.ui && windowState.ui.size) {
-    browserOpts.width = firstDefinedValue(browserOpts.width, windowState.ui.size[0])
-    browserOpts.height = firstDefinedValue(browserOpts.height, windowState.ui.size[1])
-  }
-  browserOpts.width = firstDefinedValue(browserOpts.width, browserOpts.innerWidth, defaults.width)
-  // height and innerHeight are the frame webview size
-  browserOpts.height = firstDefinedValue(browserOpts.height, browserOpts.innerHeight)
-  if (typeof browserOpts.height === 'number') {
-    // add navbar height to get total height for BrowserWindow
-    browserOpts.height = browserOpts.height + navbarHeight()
-  } else {
-    // no inner height so check outer height or use default
-    browserOpts.height = firstDefinedValue(browserOpts.outerHeight, defaults.height)
-  }
-  return browserOpts
-}
-
-/**
- * Determine window position (x / y)
- */
-const setWindowPosition = (browserOpts, defaults, windowState) => {
-  if (browserOpts.positionByMouseCursor) {
-    const screenPos = electron.screen.getCursorScreenPoint()
-    browserOpts.x = screenPos.x
-    browserOpts.y = screenPos.y
-  } else if (windowState.ui && windowState.ui.position) {
-    // Position comes from window state
-    browserOpts.x = firstDefinedValue(browserOpts.x, windowState.ui.position[0])
-    browserOpts.y = firstDefinedValue(browserOpts.y, windowState.ui.position[1])
-  } else if (typeof defaults.x === 'number' && typeof defaults.y === 'number') {
-    // Position comes from the default position
-    browserOpts.x = firstDefinedValue(browserOpts.x, defaults.x)
-    browserOpts.y = firstDefinedValue(browserOpts.y, defaults.y)
-  } else {
-    // Default the position
-    browserOpts.x = firstDefinedValue(browserOpts.x, browserOpts.left, browserOpts.screenX)
-    browserOpts.y = firstDefinedValue(browserOpts.y, browserOpts.top, browserOpts.screenY)
-  }
-  return browserOpts
-}
-
-const createWindow = (action) => {
-  const frameOpts = (action.frameOpts && action.frameOpts.toJS()) || {}
-  let browserOpts = (action.browserOpts && action.browserOpts.toJS()) || {}
-  const windowState = action.restoredState || {}
-  const defaults = windowDefaults()
-
-  browserOpts = setWindowDimensions(browserOpts, defaults, windowState)
-  browserOpts = setWindowPosition(browserOpts, defaults, windowState)
-
-  delete browserOpts.left
-  delete browserOpts.top
-
-  const screen = electron.screen
-  const primaryDisplay = screen.getPrimaryDisplay()
-  const parentWindowKey = browserOpts.parentWindowKey
-  const parentWindow = parentWindowKey ? BrowserWindow.fromId(parentWindowKey) : BrowserWindow.getFocusedWindow()
-  const bounds = parentWindow ? parentWindow.getBounds() : primaryDisplay.bounds
-
-  // position on screen should be relative to focused window
-  // or the primary display if there is no focused window
-  const display = screen.getDisplayNearestPoint(bounds)
-
-  // if no parentWindow, x, y or center is defined then go ahead
-  // and center it if it's smaller than the display width
-  // typeof and isNaN are used because 0 is falsey
-  if (!(parentWindow ||
-      browserOpts.center === false ||
-      browserOpts.x > 0 ||
-      browserOpts.y > 0) &&
-      browserOpts.width < display.bounds.width) {
-    browserOpts.center = true
-  } else {
-    browserOpts.center = false
-    // don't offset if focused window is at least as big as the screen it's on
-    if (bounds.width >= display.bounds.width && bounds.height >= display.bounds.height) {
-      browserOpts.x = firstDefinedValue(browserOpts.x, display.bounds.x)
-      browserOpts.y = firstDefinedValue(browserOpts.y, display.bounds.y)
-    } else {
-      browserOpts.x = firstDefinedValue(browserOpts.x, bounds.x + defaults.windowOffset)
-      browserOpts.y = firstDefinedValue(browserOpts.y, bounds.y + defaults.windowOffset)
-    }
-
-    // make sure the browser won't be outside the viewable area of any display
-    // negative numbers aren't allowed so we don't need to worry about that
-    const displays = screen.getAllDisplays()
-    const maxX = Math.max(...displays.map((display) => { return display.bounds.x + display.bounds.width }))
-    const maxY = Math.max(...displays.map((display) => { return display.bounds.y + display.bounds.height }))
-
-    browserOpts.x = Math.min(browserOpts.x, maxX - defaults.windowOffset)
-    browserOpts.y = Math.min(browserOpts.y, maxY - defaults.windowOffset)
-  }
-
-  const minWidth = isModal(browserOpts) ? defaults.minModalWidth : defaults.minWidth
-  const minHeight = isModal(browserOpts) ? defaults.minModalHeight : defaults.minHeight
-
-  // min width and height don't seem to work when the window is first created
-  browserOpts.width = browserOpts.width < minWidth ? minWidth : browserOpts.width
-  browserOpts.height = browserOpts.height < minHeight ? minHeight : browserOpts.height
-
-  const autoHideMenuBarSetting = isDarwin || getSetting(settings.AUTO_HIDE_MENU)
-
-  const windowProps = {
-    // smaller min size for "modal" windows
-    minWidth,
-    minHeight,
-    // Neither a frame nor a titlebar
-    // frame: false,
-    // A frame but no title bar and windows buttons in titlebar 10.10 OSX and up only?
-    titleBarStyle: 'hidden-inset',
-    autoHideMenuBar: autoHideMenuBarSetting,
-    title: appConfig.name,
-    webPreferences: defaults.webPreferences,
-    frame: !isWindows
-  }
-
-  if (process.platform === 'linux') {
-    windowProps.icon = path.join(__dirname, '..', '..', 'res', 'app.png')
-  }
-
-  const homepageSetting = getSetting(settings.HOMEPAGE)
-  const startupSetting = getSetting(settings.STARTUP_MODE)
-  const toolbarUserInterfaceScale = getSetting(settings.TOOLBAR_UI_SCALE)
-
-  setImmediate(() => {
-    let mainWindow = new BrowserWindow(Object.assign(windowProps, browserOpts, {disposition: frameOpts.disposition}))
-
-    // initialize frames state
-    let frames = []
-    if (action.restoredState) {
-      frames = action.restoredState.frames
-      action.restoredState.frames = []
-      action.restoredState.tabs = []
-    } else {
-      if (frameOpts && Object.keys(frameOpts).length > 0) {
-        if (frameOpts.forEach) {
-          frames = frameOpts
-        } else {
-          frames.push(frameOpts)
-        }
-      } else if (startupSetting === 'homePage' && homepageSetting) {
-        frames = homepageSetting.split('|').map((homepage) => {
-          return {
-            location: homepage
-          }
-        })
-      }
-    }
-
-    if (frames.length === 0) {
-      frames = [{}]
-    }
-
-    if (windowState.ui && windowState.ui.isMaximized) {
-      mainWindow.maximize()
-    }
-
-    if (windowState.ui && windowState.ui.isFullScreen) {
-      mainWindow.setFullScreen(true)
-    }
-
-    mainWindow.webContents.on('did-finish-load', (e) => {
-      lastEmittedState = appState
-      mainWindow.webContents.setZoomLevel(zoomLevel[toolbarUserInterfaceScale] || 0.0)
-      e.sender.send(messages.INITIALIZE_WINDOW,
-        {
-          disposition: frameOpts.disposition,
-          id: mainWindow.id
-        },
-        appState.toJS(),
-        frames,
-        action.restoredState)
-      if (action.cb) {
-        action.cb()
-      }
-    })
-
-    mainWindow.on('ready-to-show', () => {
-      mainWindow.show()
-    })
-
-    mainWindow.loadURL(appUrlUtil.getBraveExtIndexHTML())
-  })
-}
 
 class AppStore extends EventEmitter {
   getState () {
@@ -289,48 +81,6 @@ class AppStore extends EventEmitter {
 
   removeChangeListener (callback) {
     this.removeListener(CHANGE_EVENT, callback)
-  }
-}
-
-function windowDefaults () {
-  setDefaultWindowSize()
-
-  return {
-    show: false,
-    width: appState.getIn(['defaultWindowParams', 'width']) || appState.get('defaultWindowWidth'),
-    height: appState.getIn(['defaultWindowParams', 'height']) || appState.get('defaultWindowHeight'),
-    x: appState.getIn(['defaultWindowParams', 'x']) || undefined,
-    y: appState.getIn(['defaultWindowParams', 'y']) || undefined,
-    minWidth: 480,
-    minHeight: 300,
-    minModalHeight: 100,
-    minModalWidth: 100,
-    windowOffset: 20,
-    webPreferences: {
-      sharedWorker: true,
-      nodeIntegration: false,
-      partition: 'default',
-      webSecurity: false,
-      allowFileAccessFromFileUrls: true,
-      allowUniversalAccessFromFileUrls: true
-    }
-  }
-}
-
-/**
- * set the default width and height if they
- * haven't been initialized yet
- */
-function setDefaultWindowSize () {
-  if (!appState) {
-    return
-  }
-  const screen = electron.screen
-  const primaryDisplay = screen.getPrimaryDisplay()
-  if (!appState.getIn(['defaultWindowParams', 'width']) && !appState.get('defaultWindowWidth') &&
-      !appState.getIn(['defaultWindowParams', 'height']) && !appState.get('defaultWindowHeight')) {
-    appState = appState.setIn(['defaultWindowParams', 'width'], primaryDisplay.workAreaSize.width)
-    appState = appState.setIn(['defaultWindowParams', 'height'], primaryDisplay.workAreaSize.height)
   }
 }
 
@@ -434,9 +184,6 @@ const handleAppAction = (action) => {
     case appConstants.APP_SHUTTING_DOWN:
       AppDispatcher.shutdown()
       app.quit()
-      break
-    case appConstants.APP_NEW_WINDOW:
-      createWindow(action)
       break
     case appConstants.APP_CHANGE_NEW_TAB_DETAIL:
       appState = aboutNewTabState.mergeDetails(appState, action)
