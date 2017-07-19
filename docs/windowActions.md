@@ -187,9 +187,14 @@ The new frame is expected to appear at the index it was last closed at
 
 
 
-### clearClosedFrames() 
+### clearClosedFrames(location) 
 
 Dispatches a message to the store to clear closed frames
+
+**Parameters**
+
+**location**: `string`, If specified, only clear frames with this
+  location.
 
 
 
